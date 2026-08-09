@@ -1,0 +1,1206 @@
+---
+title: 'PLAYERS'
+format: dashboard
+logo: logo.png
+echo: false
+---
+
+``` {python}
+
+team_name = 'TEAM1'
+
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from tabulate import tabulate
+wt = pd.read_excel('pvz.xls')
+wt['players'] = wt['W TEAM SQUAD'] + wt['L TEAM SQUAD']
+o = wt[(wt['OFF TEAM'] == team_name)]
+d = wt[(wt['DEF TEAM'] == team_name)]
+names = o[o['1PTA'].astype(bool)]
+names = names[names['1PTA'].notna()]
+names = names['1PTA'].unique()
+
+
+```
+
+# PLAYERS
+
+```{python}
+offense = []
+for name in names:
+    games = wt[wt['players'].str.contains(name)]['GAME ID'].nunique()
+    wins = wt[(wt['players'].str.contains(name)) & (wt['W TEAM'] == team_name)]['GAME ID'].nunique()
+    ppos = o[o['players'].str.contains(name)]
+    topos = ppos['PS'].count()
+    topts = ppos['PS'].sum()
+    intot = ppos[ppos['OFF TRIO'].str.contains(name)]
+    inpos = intot['PS'].count()
+    inpts = intot['PS'].sum()
+    outpos = topos - inpos
+    outpts = topts - inpts
+    offense.append({'Player': name, 'GAMES': games, 'WINS': wins, 'O IN POS': inpos, 'O IN PTS': inpts, 'O OUT POS': outpos, 'O OUT PTS': outpts})
+poff = pd.DataFrame(offense)
+defense = []
+for name in names:
+    ppos = d[d['players'].str.contains(name)]
+    topos = ppos['PS'].count()
+    topts = ppos['PS'].sum()
+    intot = ppos[ppos['DEF TRIO'].str.contains(name)]
+    inpos = intot['PS'].count()
+    inpts = intot['PS'].sum()
+    outpos = topos - inpos
+    outpts = topts - inpts
+    defense.append({'Player': name, 'D IN POS': inpos, 'D IN PTS': inpts, 'D OUT POS': outpos, 'D OUT PTS': outpts})
+pde = pd.DataFrame(defense)
+player_stats = pd.merge(poff, pde, on='Player')
+player_stats['OFF USAGE'] = ((player_stats['O IN POS'] / (player_stats['O IN POS'] + player_stats['O OUT POS']) * 100).round(1)).astype(str) + '%'
+player_stats['DEF USAGE'] = ((player_stats['D IN POS'] / (player_stats['D IN POS'] + player_stats['D OUT POS']) * 100).round(1)).astype(str) + '%'
+player_stats['OFF EFF'] = ((player_stats['O IN PTS'] / player_stats['O IN POS']) * 100).round(1)
+player_stats['DEF EFF'] = ((player_stats['D IN PTS'] / player_stats['D IN POS']) * 100).round(1)
+player_stats['POSS EFF'] = (player_stats['OFF EFF'] - player_stats['DEF EFF']) - (((player_stats['O OUT PTS'] / player_stats['O OUT POS']) - (player_stats['D OUT PTS'] / player_stats['D OUT POS'])) * 100).round(1)
+player_stats['+/- RATE'] = (player_stats['O IN PTS'] - player_stats['D IN PTS']) - (player_stats['O OUT PTS'] - player_stats['D OUT PTS'])
+player_stats = player_stats[['Player', 'GAMES', 'WINS', 'OFF USAGE', 'OFF EFF', 'DEF USAGE', 'DEF EFF', 'POSS EFF', '+/- RATE']]
+player_stats = player_stats.set_index('Player')
+
+ast = o.groupby('AS')['PS'].sum()
+off_reb = o.groupby('OFFR')['REBC'].count()
+def_reb = d.groupby('DEFR')['REBC'].count()
+to = o.groupby('TO')['PS'].count()
+steal = d.groupby('S')['PS'].count()
+base_stas = []
+for name in names:
+    games = wt[wt['players'].str.contains(name)]['GAME ID'].nunique()
+    base_stas.append({'Player': name,
+                      'GAMES': games,
+                      'ASSISTED PTS': ast.get(name, 0) / games,
+                      'OFF REBS': off_reb.get(name, 0) / games,
+                      'DEF REBS': def_reb.get(name, 0) / games,
+                      'TOT REBS': (off_reb.get(name, 0) + def_reb.get(name, 0)) / games,
+                      'TO': to.get(name, 0) / games,
+                      'STEALS': steal.get(name, 0) / games})
+base_stats = pd.DataFrame(base_stas)
+base_stats['SCORED PTS'] = [5.25, 4.00, 6.10, 5.50, 2.50]
+base_stats['CREATED PTS'] = base_stats['ASSISTED PTS'] + base_stats['SCORED PTS']
+
+base_stats = base_stats.set_index('Player')
+base_stats = base_stats[['SCORED PTS', 'ASSISTED PTS', 'CREATED PTS', 'OFF REBS', 'DEF REBS', 'TOT REBS', 'TO', 'STEALS']]
+base_stats = base_stats.round(2)
+
+
+```
+
+## PLAYERS BASE STATS 1/2 ROW {height="50%"}
+
+``` {python}
+
+base_stats
+
+```
+
+## PLAYERS BASE STATS 2/2 ROW {height="50%"}
+
+``` {python}
+
+player_stats
+
+```
+
+# 2VS2 OFFENSE
+
+## 2VS2 OFFENSE ATTACKER Row {height="50%"}
+
+``` {python}
+comba = o.groupby('COA1').agg(o_poss_tot = ('PS', 'count'),
+                              o_poss_pts = ('PS', 'sum'),
+                              o_poss_eff = ('PS', 'mean'))
+comba['pr'] = (comba['o_poss_tot'] / comba['o_poss_tot'].sum() * 100).round(1)
+comba['o_poss_eff'] = (comba['o_poss_eff'] * 100).round(1)
+comba = comba.reset_index()
+combs = o.groupby('COA2').agg(o_poss_tot = ('PS', 'count'),
+                              o_poss_pts = ('PS', 'sum'),
+                              o_poss_eff = ('PS', 'mean'))
+combs['pr'] = (combs['o_poss_tot'] / combs['o_poss_tot'].sum() * 100).round(1)
+combs['o_poss_eff'] = (combs['o_poss_eff'] * 100).round(1)
+combs = combs.reset_index()
+
+amove = o.groupby(['COA1', 'A1M']).agg(o_poss_eff = ('PS', 'mean'))  
+amove = amove.reset_index()
+amove = amove.set_index(['COA1', 'A1M']).unstack()
+amove.columns = [f'{i}_{j}' for i, j in amove.columns]
+amove = amove.reset_index()
+amove = amove[['COA1', 'o_poss_eff_D', 'o_poss_eff_P', 'o_poss_eff_S']]
+amove[['o_poss_eff_D', 'o_poss_eff_P', 'o_poss_eff_S']] = (amove[['o_poss_eff_D', 'o_poss_eff_P', 'o_poss_eff_S']] * 100).round(1)
+
+smove = o.groupby(['COA2', 'A2M']).agg(o_poss_eff = ('PS', 'mean'))
+smove = smove.reset_index()
+smove = smove.set_index(['COA2', 'A2M']).unstack()
+smove.columns = [f'{i}_{j}' for i, j in smove.columns]
+smove = smove.reset_index()
+smove = smove[['COA2', 'o_poss_eff_P', 'o_poss_eff_R']]
+smove[['o_poss_eff_P', 'o_poss_eff_R']] = (smove[['o_poss_eff_P', 'o_poss_eff_R']] * 100).round(1)
+
+
+afs = o.groupby(['COA1', 'D1M']).agg(o_poss_eff = ('PS', 'mean'))
+afs = afs.reset_index()
+afs = afs.set_index(['COA1', 'D1M']).unstack()
+afs.columns = [f'{i}_{j}' for i, j in afs.columns]
+afs = afs.reset_index()
+afs[['o_poss_eff_F', 'o_poss_eff_S']] = (afs[['o_poss_eff_F', 'o_poss_eff_S']] * 100).round(1)
+
+sfs = o.groupby(['COA2', 'D2M']).agg(o_poss_eff = ('PS', 'mean'))
+sfs = sfs.reset_index()
+sfs = sfs.set_index(['COA2', 'D2M']).unstack()
+sfs.columns = [f'{i}_{j}' for i, j in sfs.columns]
+sfs = sfs.reset_index()
+sfs[['o_poss_eff_F', 'o_poss_eff_S']] = (sfs[['o_poss_eff_F', 'o_poss_eff_S']] * 100).round(1)
+
+```
+
+### 2VS2 OFFENSE ATTACKER 1/3 Column {width="33%"}
+
+```{python}
+cats = comba['COA1']
+v1 = comba['pr']
+v2 = comba['o_poss_eff']
+w = 0.4
+x = np.arange(len(cats))
+fig, ax = plt.subplots(figsize = (7.5, 4.65), 
+                       layout = 'constrained')
+spalvos = plt.color_sequences["tab20c"]
+bar1 = plt.bar(x - w/2, v1, width = w, color = spalvos[2], edgecolor = 'w', label='POSSESSIONS %')
+bar2 = plt.bar(x + w/2, v2, width = w, color = spalvos[6], edgecolor = 'w', label='EFFICIENCY')
+for bar in bar1:
+    height = bar.get_height()
+    ax.annotate(text = f'{height}', 
+                xy = (bar.get_x() + bar.get_width() / 2, height - 4.5),
+                ha = 'center')
+for bar in bar2:
+    height = bar.get_height()
+    ax.annotate(text = f'{height}', 
+                xy = (bar.get_x() + bar.get_width() / 2, height - 4.5),
+                ha = 'center')
+ax.spines['top'].set_visible(False)
+ax.spines['right'].set_visible(False)
+plt.xticks(x, cats)
+plt.title('ATTACKER', fontsize = 16, fontweight = 'bold')
+plt.legend(frameon=False)
+```
+
+### 2VS2 OFFENSE ATTACKER 2/3 Column {width="33%"}
+
+```{python}
+cats = amove['COA1']
+v1 = amove['o_poss_eff_D']
+v2 = amove['o_poss_eff_P']
+v3 = amove['o_poss_eff_S']
+w = 0.25
+x = np.arange(len(cats))
+fig, ax = plt.subplots(figsize = (7.5, 4.65), 
+                       layout = 'constrained')
+spalvos = plt.color_sequences["tab20b"]
+bar1 = plt.bar(x - w, v1, width = w, color = spalvos[3], edgecolor = 'w', label='DRIVE')
+bar2 = plt.bar(x , v2, width = w, color = spalvos[7], edgecolor = 'w', label='PASS')
+bar3 = plt.bar(x + w, v3, width = w, color = spalvos[15], edgecolor = 'w', label='SHOOT')
+for bar in bar1:
+    height = bar.get_height()
+    ax.annotate(text = f'{height}', 
+                xy = (bar.get_x() + bar.get_width() / 2, height - 4.5),
+                ha = 'center')
+for bar in bar2:
+    height = bar.get_height()
+    ax.annotate(text = f'{height}', 
+                xy = (bar.get_x() + bar.get_width() / 2, height - 4.5),
+                ha = 'center')
+for bar in bar3:
+    height = bar.get_height()
+    ax.annotate(text = f'{height}', 
+                xy = (bar.get_x() + bar.get_width() / 2, height - 4.5),
+                ha = 'center')
+ax.spines['top'].set_visible(False)
+ax.spines['right'].set_visible(False)
+plt.xticks(x, cats)
+plt.title('ATTACKER MOVE EFFICIENCY', fontsize = 16, fontweight = 'bold')
+plt.legend(frameon=False)
+```
+
+### 2VS2 OFFENSE ATTACKER 3/3 Column {width="33%"}
+
+```{python}
+cats = afs['COA1']
+v1 = afs['o_poss_eff_F']
+v2 = afs['o_poss_eff_S']
+w = 0.4
+x = np.arange(len(cats))
+fig, ax = plt.subplots(figsize = (7.5, 4.65), 
+                       layout = 'constrained')
+spalvos = plt.color_sequences["tab20c"]
+bar1 = plt.bar(x - w/2, v1, width = w, color = spalvos[14], edgecolor = 'w', label='FOLLOW')
+bar2 = plt.bar(x + w/2, v2, width = w, color = spalvos[18], edgecolor = 'w', label='SWITCH')
+
+for bar in bar1:
+    height = bar.get_height()
+    ax.annotate(text = f'{height}', 
+                xy = (bar.get_x() + bar.get_width() / 2, height - 4.5),
+                ha = 'center')
+for bar in bar2:
+    height = bar.get_height()
+    ax.annotate(text = f'{height}', 
+                xy = (bar.get_x() + bar.get_width() / 2, height - 4.5),
+                ha = 'center')
+ax.spines['top'].set_visible(False)
+ax.spines['right'].set_visible(False)
+plt.xticks(x, cats)
+plt.title('ATTACKER EFFICIENCY (DEF MOVE)', fontsize = 16, fontweight = 'bold')
+plt.legend(frameon=False)
+```
+
+## 2VS2 OFFENSE SCREENER Row {height="50%"}
+
+
+### 2VS2 OFFENSE SCREENER 1/3 Column {width="33%"}
+
+```{python}
+cats = combs['COA2']
+v1 = combs['pr']
+v2 = combs['o_poss_eff']
+w = 0.4
+x = np.arange(len(cats))
+fig, ax = plt.subplots(figsize = (7.5, 4.65), 
+                       layout = 'constrained')
+spalvos = plt.color_sequences["tab20c"]
+bar1 = plt.bar(x - w/2, v1, width = w, color = spalvos[2], edgecolor = 'w', label='POSSESSIONS %')
+bar2 = plt.bar(x + w/2, v2, width = w, color = spalvos[6], edgecolor = 'w', label='EFFICIENCY')
+for bar in bar1:
+    height = bar.get_height()
+    ax.annotate(text = f'{height}', 
+                xy = (bar.get_x() + bar.get_width() / 2, height - 4.5),
+                ha = 'center')
+for bar in bar2:
+    height = bar.get_height()
+    ax.annotate(text = f'{height}', 
+                xy = (bar.get_x() + bar.get_width() / 2, height - 4.5),
+                ha = 'center')
+ax.spines['top'].set_visible(False)
+ax.spines['right'].set_visible(False)
+plt.xticks(x, cats)
+plt.title('SCREENER', fontsize = 16, fontweight = 'bold')
+plt.legend(frameon=False)
+```
+
+### 2VS2 OFFENSE SCREENER 2/3 Column {width="33%"}
+
+```{python}
+cats = smove['COA2']
+v1 = smove['o_poss_eff_P']
+v2 = smove['o_poss_eff_R']
+w = 0.4
+x = np.arange(len(cats))
+fig, ax = plt.subplots(figsize = (7.5, 4.65), 
+                       layout = 'constrained')
+spalvos = plt.color_sequences["tab20b"]
+bar1 = plt.bar(x - w/2, v1, width = w, color = spalvos[3], edgecolor = 'w', label='POP')
+bar2 = plt.bar(x + w/2, v2, width = w, color = spalvos[15], edgecolor = 'w', label='ROLL')
+for bar in bar1:
+    height = bar.get_height()
+    ax.annotate(text = f'{height}',
+                xy = (bar.get_x() + bar.get_width() / 2, height - 4.5),
+                ha = 'center')
+for bar in bar2:
+    height = bar.get_height()
+    ax.annotate(text = f'{height}',
+                xy = (bar.get_x() + bar.get_width() / 2, height - 4.5),
+                ha = 'center')
+ax.spines['top'].set_visible(False)
+ax.spines['right'].set_visible(False)
+plt.xticks(x, cats)
+plt.title('SCREENER MOVE EFFICIENCY', fontsize = 16, fontweight = 'bold')
+plt.legend(frameon=False)
+```
+
+### 2VS2 OFFENSE SCREENER 3/3 Column {width="33%"}
+
+```{python}
+cats = sfs['COA2']
+v1 = sfs['o_poss_eff_F']
+v2 = sfs['o_poss_eff_S']
+w = 0.4
+x = np.arange(len(cats))
+fig, ax = plt.subplots(figsize = (7.5, 4.65), 
+                       layout = 'constrained')
+spalvos = plt.color_sequences["tab20c"]
+bar1 = plt.bar(x - w/2, v1, width = w, color = spalvos[14], edgecolor = 'w', label='FOLLOW')
+bar2 = plt.bar(x + w/2, v2, width = w, color = spalvos[18], edgecolor = 'w', label='SWITCH')
+
+for bar in bar1:
+    height = bar.get_height()
+    ax.annotate(text = f'{height}', 
+                xy = (bar.get_x() + bar.get_width() / 2, height - 4.5),
+                ha = 'center')
+for bar in bar2:
+    height = bar.get_height()
+    ax.annotate(text = f'{height}', 
+                xy = (bar.get_x() + bar.get_width() / 2, height - 4.5),
+                ha = 'center')
+ax.spines['top'].set_visible(False)
+ax.spines['right'].set_visible(False)
+plt.xticks(x, cats)
+plt.title('SCREENER EFFICIENCY (DEF MOVE)', fontsize = 16, fontweight = 'bold')
+plt.legend(frameon=False)
+```
+
+# 2VS2 DEFENSE
+
+## 2VS2 DEFENSE ATTACKER Row {height="50%"}
+
+```{python}
+d_comba = d.groupby('COD1').agg(d_poss_tot = ('PS', 'count'),
+                              d_poss_pts = ('PS', 'sum'),
+                              d_poss_eff = ('PS', 'mean'))
+d_comba['pr'] = (d_comba['d_poss_tot'] / d_comba['d_poss_tot'].sum() * 100).round(1)
+d_comba['d_poss_eff'] = (d_comba['d_poss_eff'] * 100).round(1)
+d_comba = d_comba.reset_index()
+d_combs = d.groupby('COD2').agg(d_poss_tot = ('PS', 'count'),
+                              d_poss_pts = ('PS', 'sum'),
+                              d_poss_eff = ('PS', 'mean'))
+d_combs['pr'] = (d_combs['d_poss_tot'] / d_combs['d_poss_tot'].sum() * 100).round(1)
+d_combs['d_poss_eff'] = (d_combs['d_poss_eff'] * 100).round(1)
+d_combs = d_combs.reset_index()
+
+admove = d.groupby(['COD1', 'D1M']).agg(d_poss_eff = ('PS', 'mean'))  
+admove = admove.reset_index()
+admove = admove.set_index(['COD1', 'D1M']).unstack()
+admove.columns = [f'{i}_{j}' for i, j in admove.columns]
+admove = admove.reset_index()
+admove[['d_poss_eff_F', 'd_poss_eff_S']] = (admove[['d_poss_eff_F', 'd_poss_eff_S']] * 100).round(1)
+
+sdmove = d.groupby(['COD2', 'D2M']).agg(d_poss_eff = ('PS', 'mean'))
+sdmove = sdmove.reset_index()
+sdmove = sdmove.set_index(['COD2', 'D2M']).unstack()
+sdmove.columns = [f'{i}_{j}' for i, j in sdmove.columns]
+sdmove = sdmove.reset_index()
+sdmove[['d_poss_eff_F', 'd_poss_eff_S']] = (sdmove[['d_poss_eff_F', 'd_poss_eff_S']] * 100).round(1)
+
+d_amove = d.groupby(['COD1', 'A1M']).agg(d_poss_eff = ('PS', 'mean'))
+d_amove = d_amove.reset_index()
+d_amove = d_amove.set_index(['COD1', 'A1M']).unstack()
+d_amove.columns = [f'{i}_{j}' for i, j in d_amove.columns]
+d_amove = d_amove.reset_index()
+d_amove = d_amove[['COD1', 'd_poss_eff_D', 'd_poss_eff_P', 'd_poss_eff_S']]
+d_amove[['d_poss_eff_D', 'd_poss_eff_P', 'd_poss_eff_S']] = (d_amove[['d_poss_eff_D', 'd_poss_eff_P', 'd_poss_eff_S']] * 100).round(1)
+
+d_smoves = d.groupby(['COD2', 'A2M']).agg(d_poss_eff = ('PS', 'mean'))
+d_smoves = d_smoves.reset_index()
+d_smoves = d_smoves.set_index(['COD2', 'A2M']).unstack()
+d_smoves.columns = [f'{i}_{j}' for i, j in d_smoves.columns]
+d_smoves = d_smoves.reset_index()
+d_smoves[['d_poss_eff_P', 'd_poss_eff_R']] = (d_smoves[['d_poss_eff_P', 'd_poss_eff_R']] * 100).round(1)
+```
+
+### 2VS2 DEFENSE ATTACKER 1/3 Column {width="33%"}
+
+```{python}
+cats = d_comba['COD1']
+v1 = d_comba['pr']
+v2 = d_comba['d_poss_eff']
+w = 0.4
+x = np.arange(len(cats))
+fig, ax = plt.subplots(figsize = (7.5, 4.65), 
+                       layout = 'constrained')
+spalvos = plt.color_sequences["tab20c"]
+bar1 = plt.bar(x - w/2, v1, width = w, color = spalvos[2], edgecolor = 'w', label='POSSESSIONS %')
+bar2 = plt.bar(x + w/2, v2, width = w, color = spalvos[6], edgecolor = 'w', label='EFFICIENCY')
+for bar in bar1:
+    height = bar.get_height()
+    ax.annotate(text = f'{height}', 
+                xy = (bar.get_x() + bar.get_width() / 2, height - 4.5),
+                ha = 'center')
+for bar in bar2:
+    height = bar.get_height()
+    ax.annotate(text = f'{height}', 
+                xy = (bar.get_x() + bar.get_width() / 2, height - 4.5),
+                ha = 'center')
+ax.spines['top'].set_visible(False)
+ax.spines['right'].set_visible(False)
+plt.xticks(x, cats)
+plt.title('DEFENDING ATTACKER', fontsize = 16, fontweight = 'bold')
+plt.legend(frameon=False)
+```
+
+### 2VS2 DEFENSE ATTACKER 2/3 Column {width="33%"}
+
+```{python}
+cats =admove['COD1']
+v1 = admove['d_poss_eff_F']
+v2 = admove['d_poss_eff_S']
+w = 0.4
+x = np.arange(len(cats))
+fig, ax = plt.subplots(figsize = (7.5, 4.65), 
+                       layout = 'constrained')
+spalvos = plt.color_sequences["tab20b"]
+bar1 = plt.bar(x - w/2, v1, width = w, color = spalvos[3], edgecolor = 'w', label='FOLLOW')
+bar2 = plt.bar(x + w/2, v2, width = w, color = spalvos[15], edgecolor = 'w', label='SWITCH')
+for bar in bar1:
+    height = bar.get_height()
+    ax.annotate(text = f'{height}', 
+                xy = (bar.get_x() + bar.get_width() / 2, height - 9.5),
+                ha = 'center')
+for bar in bar2:
+    height = bar.get_height()
+    ax.annotate(text = f'{height}', 
+                xy = (bar.get_x() + bar.get_width() / 2, height - 9.5),
+                ha = 'center')
+ax.spines['top'].set_visible(False)
+ax.spines['right'].set_visible(False)
+plt.xticks(x, cats)
+plt.title('ATTACKER DEF MOVE EFFICIENCY', fontsize = 16, fontweight = 'bold')
+plt.legend(frameon=False)
+```
+
+### 2VS2 DEFENSE ATTACKER 3/3 Column {width="33%"}
+
+```{python}
+cats = d_amove['COD1']
+v1 = d_amove['d_poss_eff_D']
+v2 = d_amove['d_poss_eff_P']
+v3 = d_amove['d_poss_eff_S']
+w = 0.3
+x = np.arange(len(cats))
+fig, ax = plt.subplots(figsize = (7.5, 4.65), 
+                       layout = 'constrained')
+spalvos = plt.color_sequences["tab20c"]
+bar1 = plt.bar(x - w, v1, width = w, color = spalvos[10], edgecolor = 'w', label='DRIVE')
+bar2 = plt.bar(x , v2, width = w, color = spalvos[14], edgecolor = 'w', label='PASS')
+bar3 = plt.bar(x + w, v3, width = w, color = spalvos[18], edgecolor = 'w', label='SHOOT')
+for bar in bar1:
+    height = bar.get_height()
+    ax.annotate(text = f'{height}', 
+                xy = (bar.get_x() + bar.get_width() / 2, height - 4.5),
+                ha = 'center')
+for bar in bar2:
+    height = bar.get_height()
+    ax.annotate(text = f'{height}', 
+                xy = (bar.get_x() + bar.get_width() / 2, height - 4.5),
+                ha = 'center')
+for bar in bar3:
+    height = bar.get_height()
+    ax.annotate(text = f'{height}', 
+                xy = (bar.get_x() + bar.get_width() / 2, height - 4.5),
+                ha = 'center')
+ax.spines['top'].set_visible(False)
+ax.spines['right'].set_visible(False)
+plt.xticks(x, cats)
+plt.title('ATTACKER MOVE EFFICIENCY', fontsize = 16, fontweight = 'bold')
+plt.legend(frameon=False)
+```
+
+## 2VS2 DEFENSE SCREENER Row {height="50%"}
+
+### 2VS2 DEFENSE SCREENER 1/3 Column {width="33%"}
+
+```{python}
+cats = d_combs['COD2']
+v1 = d_combs['pr']
+v2 = d_combs['d_poss_eff']
+w = 0.4
+x = np.arange(len(cats))
+fig, ax = plt.subplots(figsize = (7.5, 4.65), 
+                       layout = 'constrained')
+spalvos = plt.color_sequences["tab20c"]
+bar1 = plt.bar(x - w/2, v1, width = w, color = spalvos[2], edgecolor = 'w', label='POSSESSIONS %')
+bar2 = plt.bar(x + w/2, v2, width = w, color = spalvos[6], edgecolor = 'w', label='EFFICIENCY')
+for bar in bar1:
+    height = bar.get_height()
+    ax.annotate(text = f'{height}', 
+                xy = (bar.get_x() + bar.get_width() / 2, height - 4.5),
+                ha = 'center')
+for bar in bar2:
+    height = bar.get_height()
+    ax.annotate(text = f'{height}', 
+                xy = (bar.get_x() + bar.get_width() / 2, height - 4.5),
+                ha = 'center')
+ax.spines['top'].set_visible(False)
+ax.spines['right'].set_visible(False)
+plt.xticks(x, cats)
+plt.title('DEFENDING SCREENER', fontsize = 16, fontweight = 'bold')
+plt.legend(frameon=False)
+```
+
+### 2VS2 DEFENSE SCREENER 2/3 Column {width="33%"}
+
+```{python}
+cats = sdmove['COD2']
+v1 = sdmove['d_poss_eff_F']
+v2 = sdmove['d_poss_eff_S']
+w = 0.4
+x = np.arange(len(cats))
+fig, ax = plt.subplots(figsize = (7.5, 4.65), 
+                       layout = 'constrained')
+spalvos = plt.color_sequences["tab20b"]
+bar1 = plt.bar(x - w/2, v1, width = w, color = spalvos[3], edgecolor = 'w', label='FOLLOW')
+bar2 = plt.bar(x + w/2, v2, width = w, color = spalvos[15], edgecolor = 'w', label='SWITCH')
+for bar in bar1:
+    height = bar.get_height()
+    ax.annotate(text = f'{height}',
+                xy = (bar.get_x() + bar.get_width() / 2, height - 4.5),
+                ha = 'center')
+for bar in bar2:
+    height = bar.get_height()
+    ax.annotate(text = f'{height}',
+                xy = (bar.get_x() + bar.get_width() / 2, height - 4.5),
+                ha = 'center')
+ax.spines['top'].set_visible(False)
+ax.spines['right'].set_visible(False)
+plt.xticks(x, cats)
+plt.title('SCREENER DEF MOVE EFFICIENCY', fontsize = 16, fontweight = 'bold')
+plt.legend(frameon=False)
+```
+
+### 2VS2 DEFENSE SCREENER 3/3 Column {width="33%"}
+
+```{python}
+cats = d_smoves['COD2']
+v1 = d_smoves['d_poss_eff_P']
+v2 = d_smoves['d_poss_eff_R']
+w = 0.4
+x = np.arange(len(cats))
+fig, ax = plt.subplots(figsize = (7.5, 4.65), 
+                       layout = 'constrained')
+spalvos = plt.color_sequences["tab20c"]
+bar1 = plt.bar(x - w/2, v1, width = w, color = spalvos[10], edgecolor = 'w', label='POP')
+bar2 = plt.bar(x + w/2, v2, width = w, color = spalvos[14], edgecolor = 'w', label='PR')
+for bar in bar1:
+    height = bar.get_height()
+    ax.annotate(text = f'{height}', 
+                xy = (bar.get_x() + bar.get_width() / 2, height - 4.5),
+                ha = 'center')
+for bar in bar2:
+    height = bar.get_height()
+    ax.annotate(text = f'{height}', 
+                xy = (bar.get_x() + bar.get_width() / 2, height - 4.5),
+                ha = 'center')
+
+ax.spines['top'].set_visible(False)
+ax.spines['right'].set_visible(False)
+plt.xticks(x, cats)
+plt.title('ATTACKER MOVE EFFICIENCY', fontsize = 16, fontweight = 'bold')
+plt.legend(frameon=False)
+```
+
+# 1VS1 OFFENSE
+
+```{python}
+o_iso_pe = o[(o['1VS1P'] == 'PE')]
+a_iso_pe = o_iso_pe.groupby('1VS1A').agg(o_poss_tot = ('PS', 'count'),
+                                         o_poss_eff = ('PS', 'mean'))
+a_iso_pe['pr'] = a_iso_pe['o_poss_tot'] / a_iso_pe['o_poss_tot'].sum()
+a_iso_pe[['o_poss_eff', 'pr']] = (a_iso_pe[['o_poss_eff', 'pr']] * 100).round(1)
+a_iso_pe = a_iso_pe.reset_index()
+
+o_iso_po = o[(o['1VS1P'] == 'PO')]
+a_iso_po = o_iso_po.groupby('1VS1A').agg(o_poss_tot = ('PS', 'count'),
+                                         o_poss_eff = ('PS', 'mean'))
+a_iso_po['pr'] = a_iso_po['o_poss_tot'] / a_iso_po['o_poss_tot'].sum()
+a_iso_po[['o_poss_eff', 'pr']] = (a_iso_po[['o_poss_eff', 'pr']] * 100).round(1)
+a_iso_po = a_iso_po.reset_index()
+
+o_iso_m_pe = o_iso_pe.groupby(['1VS1A', '1VS1M']).agg(o_poss_eff = ('PS', 'mean'))
+o_iso_m_pe = o_iso_m_pe.reset_index()
+o_iso_m_pe = o_iso_m_pe.set_index(['1VS1A', '1VS1M']).unstack()
+o_iso_m_pe.columns = [f'{i}_{j}' for i, j in o_iso_m_pe.columns]
+o_iso_m_pe = o_iso_m_pe.reset_index()
+o_iso_m_pe[['o_poss_eff_B', 'o_poss_eff_D', 'o_poss_eff_S']] = (o_iso_m_pe[['o_poss_eff_B', 'o_poss_eff_D', 'o_poss_eff_S']] * 100).round(1)
+
+o_iso_m_po = o_iso_po.groupby(['1VS1A', '1VS1M']).agg(o_poss_eff = ('PS', 'mean'))
+o_iso_m_po = o_iso_m_po.reset_index()
+o_iso_m_po = o_iso_m_po.set_index(['1VS1A', '1VS1M']).unstack()
+o_iso_m_po.columns = [f'{i}_{j}' for i, j in o_iso_m_po.columns]
+o_iso_m_po = o_iso_m_po.reset_index()
+o_iso_m_po[['o_poss_eff_D', 'o_poss_eff_SE']] = (o_iso_m_po[['o_poss_eff_D', 'o_poss_eff_SE']] * 100).round(1)
+
+```
+
+## 1VS1 OFFENSE PERIMETER ROW {height="50%"}
+
+### 1VS1 OFFENSE PERIMETER 1/2 Column {width="50%"}
+
+```{python}
+cats = a_iso_pe['1VS1A']
+v1 = a_iso_pe['pr']
+v2 = a_iso_pe['o_poss_eff']
+w = 0.4
+x = np.arange(len(cats))
+fig, ax = plt.subplots(figsize = (7.5, 4.65), layout = 'constrained')
+spalvos = plt.color_sequences["tab20c"]
+bar1 = plt.bar(x - w/2, v1, width = w, color = spalvos[2], edgecolor = 'w', label='POSSESSIONS %')
+bar2 = plt.bar(x + w/2, v2, width = w, color = spalvos[6], edgecolor = 'w', label='EFFICIENCY')
+for bar in bar1:
+    height = bar.get_height()
+    ax.annotate(text = f'{height}', 
+                xy = (bar.get_x() + bar.get_width() / 2, height - 4.5),
+                ha = 'center')
+for bar in bar2:
+    height = bar.get_height()
+    ax.annotate(text = f'{height}', 
+                xy = (bar.get_x() + bar.get_width() / 2, height - 4.5),
+                ha = 'center')
+ax.spines['top'].set_visible(False)
+ax.spines['right'].set_visible(False)
+plt.xticks(x, cats)
+plt.title('1VS1 PERIMETER', fontsize = 16, fontweight = 'bold')
+plt.legend(frameon=False)
+```
+
+### 1VS1 OFFENSE PERIMETER 2/2 Column {width="50%"}
+
+```{python}
+cats = o_iso_m_pe['1VS1A']
+v1 = o_iso_m_pe['o_poss_eff_B']
+v2 = o_iso_m_pe['o_poss_eff_D']
+v3 = o_iso_m_pe['o_poss_eff_S']
+w = 0.3
+x = np.arange(len(cats))
+fig, ax = plt.subplots(figsize = (7.5, 4.65), 
+                       layout = 'constrained')
+spalvos = plt.color_sequences["tab20b"]
+bar1 = plt.bar(x - w, v1, width = w, color = spalvos[3], edgecolor = 'w', label='BACKDOOR')
+bar2 = plt.bar(x , v2, width = w, color = spalvos[7], edgecolor = 'w', label='DRIVE')
+bar3 = plt.bar(x + w, v3, width = w, color = spalvos[15], edgecolor = 'w', label='SHOOT')
+for bar in bar1:
+    height = bar.get_height()
+    ax.annotate(text = f'{height}', 
+                xy = (bar.get_x() + bar.get_width() / 2, height - 4.5),
+                ha = 'center')
+for bar in bar2:
+    height = bar.get_height()
+    ax.annotate(text = f'{height}', 
+                xy = (bar.get_x() + bar.get_width() / 2, height - 4.5),
+                ha = 'center')
+for bar in bar3:
+    height = bar.get_height()
+    ax.annotate(text = f'{height}', 
+                xy = (bar.get_x() + bar.get_width() / 2, height - 4.5),
+                ha = 'center')
+ax.spines['top'].set_visible(False)
+ax.spines['right'].set_visible(False)
+plt.xticks(x, cats)
+plt.title('PERIMETER MOVE EFFICIENCY', fontsize = 16, fontweight = 'bold')
+plt.legend(frameon=False)
+```
+
+## 1VS1 OFFENSE POST ROW {height="50%"}
+
+### 1VS1 OFFENSE POST 1/2 Column {width="50%"}
+
+```{python}
+cats = a_iso_po['1VS1A']
+v1 = a_iso_po['pr']
+v2 = a_iso_po['o_poss_eff']
+w = 0.4
+x = np.arange(len(cats))
+fig, ax = plt.subplots(figsize = (7.5, 4.65), 
+                       layout = 'constrained')
+spalvos = plt.color_sequences["tab20c"]
+bar1 = plt.bar(x - w/2, v1, width = w, color = spalvos[2], edgecolor = 'w', label='POSSESSIONS %')
+bar2 = plt.bar(x + w/2, v2, width = w, color = spalvos[6], edgecolor = 'w', label='EFFICIENCY')
+for bar in bar1:
+    height = bar.get_height()
+    ax.annotate(text = f'{height}', 
+                xy = (bar.get_x() + bar.get_width() / 2, height - 4.5),
+                ha = 'center')
+for bar in bar2:
+    height = bar.get_height()
+    ax.annotate(text = f'{height}', 
+                xy = (bar.get_x() + bar.get_width() / 2, height - 4.5),
+                ha = 'center')
+ax.spines['top'].set_visible(False)
+ax.spines['right'].set_visible(False)
+plt.xticks(x, cats)
+plt.title('1VS1 POST', fontsize = 16, fontweight = 'bold')
+plt.legend(frameon=False)
+```
+
+### 1VS1 OFFENSE POST 2/2 Column {width="50%"}
+
+```{python}
+cats = o_iso_m_po['1VS1A']
+v1 = o_iso_m_po['o_poss_eff_D']
+v2 = o_iso_m_po['o_poss_eff_SE']
+
+w = 0.4
+x = np.arange(len(cats))
+fig, ax = plt.subplots(figsize = (7.5, 4.65), 
+                       layout = 'constrained')
+spalvos = plt.color_sequences["tab20b"]
+bar1 = plt.bar(x - w, v1, width = w, color = spalvos[3], edgecolor = 'w', label='DRIVE')
+bar2 = plt.bar(x , v2, width = w, color = spalvos[7], edgecolor = 'w', label='SEAL')
+
+for bar in bar1:
+    height = bar.get_height()
+    ax.annotate(text = f'{height}', 
+                xy = (bar.get_x() + bar.get_width() / 2, height - 4.5),
+                ha = 'center')
+for bar in bar2:
+    height = bar.get_height()
+    ax.annotate(text = f'{height}', 
+                xy = (bar.get_x() + bar.get_width() / 2, height - 4.5),
+                ha = 'center')
+
+ax.spines['top'].set_visible(False)
+ax.spines['right'].set_visible(False)
+plt.xticks(x, cats)
+plt.title('POST MOVE EFFICIENCY', fontsize = 16, fontweight = 'bold')
+plt.legend(frameon=False)
+```
+
+# 1VS1 DEFENSE
+
+```{python}
+de_iso_pe = d[(d['1VS1P'] == 'PE')]
+d_iso_pe = de_iso_pe.groupby('1VS1D').agg(d_poss_tot = ('PS', 'count'),
+                                          d_poss_eff = ('PS', 'mean'))
+d_iso_pe['pr'] = d_iso_pe['d_poss_tot'] / d_iso_pe['d_poss_tot'].sum()
+d_iso_pe[['d_poss_eff', 'pr']] = (d_iso_pe[['d_poss_eff', 'pr']] * 100).round(1)
+d_iso_pe = d_iso_pe.reset_index()
+
+
+de_iso_po = d[(d['1VS1P'] == 'PO')]
+d_iso_po = de_iso_po.groupby('1VS1D').agg(d_poss_tot = ('PS', 'count'),
+                                          d_poss_eff = ('PS', 'mean'))
+d_iso_po['pr'] = d_iso_po['d_poss_tot'] / d_iso_po['d_poss_tot'].sum()
+d_iso_po[['d_poss_eff', 'pr']] = (d_iso_po[['d_poss_eff', 'pr']] * 100).round(1)
+d_iso_po = d_iso_po.reset_index()
+
+d_iso_m_pe = de_iso_pe.groupby(['1VS1D', '1VS1M']).agg(d_poss_eff = ('PS', 'mean'))
+d_iso_m_pe = d_iso_m_pe.reset_index()
+d_iso_m_pe = d_iso_m_pe.set_index(['1VS1D', '1VS1M']).unstack()
+d_iso_m_pe.columns = [f'{i}_{j}' for i, j in d_iso_m_pe.columns]
+d_iso_m_pe = d_iso_m_pe.reset_index()
+d_iso_m_pe[['d_poss_eff_B', 'd_poss_eff_D', 'd_poss_eff_S']] = (d_iso_m_pe[['d_poss_eff_B', 'd_poss_eff_D', 'd_poss_eff_S']] * 100).round(1)
+
+d_iso_m_po = de_iso_po.groupby(['1VS1D', '1VS1M']).agg(d_poss_eff = ('PS', 'mean'))
+d_iso_m_po = d_iso_m_po.reset_index()
+d_iso_m_po = d_iso_m_po.set_index(['1VS1D', '1VS1M']).unstack()
+d_iso_m_po.columns = [f'{i}_{j}' for i, j in d_iso_m_po.columns]
+d_iso_m_po = d_iso_m_po.reset_index()
+d_iso_m_po[['d_poss_eff_D', 'd_poss_eff_SE']] = (d_iso_m_po[['d_poss_eff_D', 'd_poss_eff_SE']] * 100).round(1)
+
+
+```
+
+## 1VS1 DEFENSE PERIMETER ROW {height="50%"}
+
+### 1VS1 DEFENSE PERIMETER 1/2 Column {width="50%"}
+
+```{python}
+cats = d_iso_pe['1VS1D']
+v1 = d_iso_pe['pr']
+v2 = d_iso_pe['d_poss_eff']
+w = 0.4
+x = np.arange(len(cats))
+fig, ax = plt.subplots(figsize = (7.5, 4.65), 
+                       layout = 'constrained')
+spalvos = plt.color_sequences["tab20c"]
+bar1 = plt.bar(x - w/2, v1, width = w, color = spalvos[2], edgecolor = 'w', label='POSSESSIONS %')
+bar2 = plt.bar(x + w/2, v2, width = w, color = spalvos[6], edgecolor = 'w', label='EFFICIENCY')
+for bar in bar1:
+    height = bar.get_height()
+    ax.annotate(text = f'{height}', 
+                xy = (bar.get_x() + bar.get_width() / 2, height - 4.5),
+                ha = 'center')
+for bar in bar2:
+    height = bar.get_height()
+    ax.annotate(text = f'{height}', 
+                xy = (bar.get_x() + bar.get_width() / 2, height - 4.5),
+                ha = 'center')
+ax.spines['top'].set_visible(False)
+ax.spines['right'].set_visible(False)
+plt.xticks(x, cats)
+plt.title('1VS1 PERIMETER', fontsize = 16, fontweight = 'bold')
+plt.legend(frameon=False)
+```
+
+### 1VS1 DEFENSE PERIMETER 2/2 Column {width="50%"}
+
+```{python}
+cats = d_iso_m_pe['1VS1D']
+v1 = d_iso_m_pe['d_poss_eff_B']
+v2 = d_iso_m_pe['d_poss_eff_D']
+v3 = d_iso_m_pe['d_poss_eff_S']
+w = 0.3
+x = np.arange(len(cats))
+fig, ax = plt.subplots(figsize = (7.5, 4.65), 
+                       layout = 'constrained')
+spalvos = plt.color_sequences["tab20b"]
+bar1 = plt.bar(x - w, v1, width = w, color = spalvos[3], edgecolor = 'w', label='BACKDOOR')
+bar2 = plt.bar(x , v2, width = w, color = spalvos[7], edgecolor = 'w', label='DRIVE')
+bar3 = plt.bar(x + w, v3, width = w, color = spalvos[15], edgecolor = 'w', label='SHOOT')
+for bar in bar1:
+    height = bar.get_height()
+    ax.annotate(text = f'{height}', 
+                xy = (bar.get_x() + bar.get_width() / 2, height - 4.5),
+                ha = 'center')
+for bar in bar2:
+    height = bar.get_height()
+    ax.annotate(text = f'{height}', 
+                xy = (bar.get_x() + bar.get_width() / 2, height - 4.5),
+                ha = 'center')
+for bar in bar3:
+    height = bar.get_height()
+    ax.annotate(text = f'{height}', 
+                xy = (bar.get_x() + bar.get_width() / 2, height - 4.5),
+                ha = 'center')
+ax.spines['top'].set_visible(False)
+ax.spines['right'].set_visible(False)
+plt.xticks(x, cats)
+plt.title('PERIMETER MOVE EFFICIENCY', fontsize = 16, fontweight = 'bold')
+plt.legend(frameon=False)
+```
+
+## 1VS1 DEFENSE POST ROW {height="50%"}
+
+### 1VS1 DEFENSE POST 1/2 Column {width="50%"}
+
+```{python}
+cats = d_iso_po['1VS1D']
+v1 = d_iso_po['pr']
+v2 = d_iso_po['d_poss_eff']
+w = 0.4
+x = np.arange(len(cats))
+fig, ax = plt.subplots(figsize = (7.5, 4.65), 
+                       layout = 'constrained')
+spalvos = plt.color_sequences["tab20c"]
+bar1 = plt.bar(x - w/2, v1, width = w, color = spalvos[2], edgecolor = 'w', label='POSSESSIONS %')
+bar2 = plt.bar(x + w/2, v2, width = w, color = spalvos[6], edgecolor = 'w', label='EFFICIENCY')
+for bar in bar1:
+    height = bar.get_height()
+    ax.annotate(text = f'{height}', 
+                xy = (bar.get_x() + bar.get_width() / 2, height - 4.5),
+                ha = 'center')
+for bar in bar2:
+    height = bar.get_height()
+    ax.annotate(text = f'{height}', 
+                xy = (bar.get_x() + bar.get_width() / 2, height - 4.5),
+                ha = 'center')
+ax.spines['top'].set_visible(False)
+ax.spines['right'].set_visible(False)
+plt.xticks(x, cats)
+plt.title('1VS1 POST', fontsize = 16, fontweight = 'bold')
+plt.legend(frameon=False)
+```
+
+### 1VS1 DEFENSE POST 2/2 Column {width="50%"}
+
+```{python}
+cats = d_iso_m_po['1VS1D']
+v1 = d_iso_m_po['d_poss_eff_D']
+v2 = d_iso_m_po['d_poss_eff_SE']
+
+w = 0.4
+x = np.arange(len(cats))
+fig, ax = plt.subplots(figsize = (7.5, 4.65), 
+                       layout = 'constrained')
+spalvos = plt.color_sequences["tab20b"]
+bar1 = plt.bar(x - w/2, v1, width = w, color = spalvos[3], edgecolor = 'w', label='DRIVE')
+bar2 = plt.bar(x + w/2, v2, width = w, color = spalvos[7], edgecolor = 'w', label='SEAL')
+
+for bar in bar1:
+    height = bar.get_height()
+    ax.annotate(text = f'{height}', 
+                xy = (bar.get_x() + bar.get_width() / 2, height - 4.5),
+                ha = 'center')
+for bar in bar2:
+    height = bar.get_height()
+    ax.annotate(text = f'{height}', 
+                xy = (bar.get_x() + bar.get_width() / 2, height - 4.5),
+                ha = 'center')
+
+ax.spines['top'].set_visible(False)
+ax.spines['right'].set_visible(False)
+plt.xticks(x, cats)
+plt.title('POST MOVE EFFICIENCY', fontsize = 16, fontweight = 'bold')
+plt.legend(frameon=False)
+```
+
+# SHOTS OFFENSE
+
+## 1PT OFFENSE SHOTS Row {height="50%"}
+
+```{python}
+
+o_1pt = o.groupby('1PTA').agg(poss = ('PS', 'count'),
+                              eff = ('PS', 'mean'))
+o_1pt['pr'] = o_1pt['poss'] / o_1pt['poss'].sum()
+o_1pt[['eff', 'pr']] = (o_1pt[['eff', 'pr']] * 100).round(1)
+o_1pt = o_1pt.reset_index()
+
+o_1pt_p = o.groupby(['1PTA', '1PTP']).agg(eff = ('PS', 'mean'))
+o_1pt_p = o_1pt_p.reset_index()
+o_1pt_p = o_1pt_p.set_index(['1PTA', '1PTP']).unstack()
+o_1pt_p.columns = [f'{i}_{j}' for i, j in o_1pt_p.columns]
+o_1pt_p = o_1pt_p.reset_index()
+o_1pt_p[['eff_MI', 'eff_PA', 'eff_PO']] = (o_1pt_p[['eff_MI', 'eff_PA', 'eff_PO']] * 100).round(1)
+
+o_ft_sh = o.groupby('FTA').agg(shot = ('FSH', 'sum'))
+o_ft_ma = o.groupby('FTA').agg(made = ('FMA', 'sum'))
+o_ft = o_ft_sh.join(o_ft_ma)                     
+o_ft['eff'] = (o_ft['made'] / o_ft['shot'] * 100).round(1)
+o_ft['pr'] = (o_ft['shot'] / o_ft['shot'].sum() * 100).round(1)
+o_ft = o_ft.reset_index()
+
+```
+
+### 1PT OFFENSE SHOTS 1/3 Column {width="33%"}
+
+```{python}
+cats = o_1pt['1PTA']
+v1 = o_1pt['pr']
+v2 = o_1pt['eff']
+w = 0.4
+x = np.arange(len(cats))
+fig, ax = plt.subplots(figsize = (7.5, 4.65), layout = 'constrained')
+spalvos = plt.color_sequences["tab20c"]
+bar1 = plt.bar(x - w/2, v1, width = w, color = spalvos[2], edgecolor = 'w', label='POSSESSIONS %')
+bar2 = plt.bar(x + w/2, v2, width = w, color = spalvos[6], edgecolor = 'w', label='EFFICIENCY')
+for bar in bar1:
+    height = bar.get_height()
+    ax.annotate(text = f'{height}', 
+                xy = (bar.get_x() + bar.get_width() / 2, height - 4.5),
+                ha = 'center')
+for bar in bar2:
+    height = bar.get_height()
+    ax.annotate(text = f'{height}', 
+                xy = (bar.get_x() + bar.get_width() / 2, height - 4.5),
+                ha = 'center')
+ax.spines['top'].set_visible(False)
+ax.spines['right'].set_visible(False)
+plt.xticks(x, cats)
+plt.title('1PT', fontsize = 16, fontweight = 'bold')
+plt.legend(frameon=False)
+```
+
+### 1PT OFFENSE SHOTS 2/3 Column {width="33%"}
+
+```{python}
+cats = o_1pt_p['1PTA']
+v1 = o_1pt_p['eff_MI']
+v2 = o_1pt_p['eff_PA']
+v3 = o_1pt_p['eff_PO']
+w = 0.3
+x = np.arange(len(cats))
+fig, ax = plt.subplots(figsize = (7.5, 4.65), 
+                       layout = 'constrained')
+spalvos = plt.color_sequences["tab20b"]
+bar1 = plt.bar(x - w, v1, width = w, color = spalvos[7], edgecolor = 'w', label='MID-RANGE')
+bar2 = plt.bar(x , v2, width = w, color = spalvos[15], edgecolor = 'w', label='PAINT')
+bar3 = plt.bar(x + w, v3, width = w, color = spalvos[3], edgecolor = 'w', label='POST')
+for bar in bar1:
+    height = bar.get_height()
+    ax.annotate(text = f'{height}', 
+                xy = (bar.get_x() + bar.get_width() / 2, height - 4.5),
+                ha = 'center')
+for bar in bar2:
+    height = bar.get_height()
+    ax.annotate(text = f'{height}', 
+                xy = (bar.get_x() + bar.get_width() / 2, height - 4.5),
+                ha = 'center')
+for bar in bar3:
+    height = bar.get_height()
+    ax.annotate(text = f'{height}', 
+                xy = (bar.get_x() + bar.get_width() / 2, height - 4.5),
+                ha = 'center')
+ax.spines['top'].set_visible(False)
+ax.spines['right'].set_visible(False)
+plt.xticks(x, cats)
+plt.title('1PT EFFICIENCY BY RANGE', fontsize = 16, fontweight = 'bold')
+plt.legend(frameon=False)
+```
+
+### 1PT OFFENSE SHOTS 3/3 Column {width="33%"}
+
+```{python}
+cats = o_ft['FTA']
+v1 = o_ft['pr']
+v2 = o_ft['eff']
+w = 0.4
+x = np.arange(len(cats))
+fig, ax = plt.subplots(figsize = (7.5, 4.65), layout = 'constrained')
+spalvos = plt.color_sequences["tab20c"]
+bar1 = plt.bar(x - w/2, v1, width = w, color = spalvos[2], edgecolor = 'w', label='POSSESSIONS %')
+bar2 = plt.bar(x + w/2, v2, width = w, color = spalvos[6], edgecolor = 'w', label='EFFICIENCY')
+for bar in bar1:
+    height = bar.get_height()
+    ax.annotate(text = f'{height}', 
+                xy = (bar.get_x() + bar.get_width() / 2, height - 4.5),
+                ha = 'center')
+for bar in bar2:
+    height = bar.get_height()
+    ax.annotate(text = f'{height}', 
+                xy = (bar.get_x() + bar.get_width() / 2, height - 4.5),
+                ha = 'center')
+ax.spines['top'].set_visible(False)
+ax.spines['right'].set_visible(False)
+plt.xticks(x, cats)
+plt.title('FT', fontsize = 16, fontweight = 'bold')
+plt.legend(frameon=False)
+```
+
+## 2PT OFFENSE SHOTS Row {height="50%"}
+
+```{python}
+
+o_2pt = o.groupby('2PTA').agg(poss = ('PS', 'count'),
+                              eff = ('PS', 'mean'))
+o_2pt['pr'] = o_2pt['poss'] / o_2pt['poss'].sum()
+o_2pt[['eff', 'pr']] = (o_2pt[['eff', 'pr']] * 100).round(1)
+o_2pt = o_2pt.reset_index()
+
+o_2pt_m = o.groupby(['2PTA', '2PTM']).agg(eff = ('PS', 'mean'))
+o_2pt_m = o_2pt_m.reset_index()
+o_2pt_m = o_2pt_m.set_index(['2PTA', '2PTM']).unstack()
+o_2pt_m.columns = [f'{i}_{j}' for i, j in o_2pt_m.columns]
+o_2pt_m = o_2pt_m.reset_index()
+o_2pt_m[['eff_C', 'eff_D']] = (o_2pt_m[['eff_C', 'eff_D']] * 100).round(1)
+
+```
+
+### 2PT OFFENSE SHOTS 1/3 Column {width="33%"}
+
+```{python}
+cats = o_2pt['2PTA']
+v1 = o_2pt['pr']
+v2 = o_2pt['eff']
+w = 0.4
+x = np.arange(len(cats))
+fig, ax = plt.subplots(figsize = (7.5, 4.65), layout = 'constrained')
+spalvos = plt.color_sequences["tab20c"]
+bar1 = plt.bar(x - w/2, v1, width = w, color = spalvos[2], edgecolor = 'w', label='POSSESSIONS %')
+bar2 = plt.bar(x + w/2, v2, width = w, color = spalvos[6], edgecolor = 'w', label='EFFICIENCY')
+for bar in bar1:
+    height = bar.get_height()
+    ax.annotate(text = f'{height}', 
+                xy = (bar.get_x() + bar.get_width() / 2, height - 4.5),
+                ha = 'center')
+for bar in bar2:
+    height = bar.get_height()
+    ax.annotate(text = f'{height}', 
+                xy = (bar.get_x() + bar.get_width() / 2, height - 4.5),
+                ha = 'center')
+ax.spines['top'].set_visible(False)
+ax.spines['right'].set_visible(False)
+plt.xticks(x, cats)
+plt.title('2PT', fontsize = 16, fontweight = 'bold')
+plt.legend(frameon=False)
+```
+
+### 2PT OFFENSE SHOTS 2/3 Column {width="33%"}
+
+```{python}
+cats = o_2pt_m['2PTA']
+v1 = o_2pt_m['eff_C']
+v2 = o_2pt_m['eff_D']
+w = 0.4
+x = np.arange(len(cats))
+fig, ax = plt.subplots(figsize = (7.5, 4.65), 
+                       layout = 'constrained')
+spalvos = plt.color_sequences["tab20b"]
+bar1 = plt.bar(x - w/2, v1, width = w, color = spalvos[15], edgecolor = 'w', label='CATCH & SHOOT')
+bar2 = plt.bar(x + w/2, v2, width = w, color = spalvos[3], edgecolor = 'w', label='OFF THE DRIBBLE')
+for bar in bar1:
+    height = bar.get_height()
+    ax.annotate(text = f'{height}', 
+                xy = (bar.get_x() + bar.get_width() / 2, height - 4.5),
+                ha = 'center')
+for bar in bar2:
+    height = bar.get_height()
+    ax.annotate(text = f'{height}', 
+                xy = (bar.get_x() + bar.get_width() / 2, height - 4.5),
+                ha = 'center')
+
+ax.spines['top'].set_visible(False)
+ax.spines['right'].set_visible(False)
+plt.xticks(x, cats)
+plt.title('2PT EFFICIENCY BY MOVE', fontsize = 16, fontweight = 'bold')
+plt.legend(frameon=False)
+```
+
+### 2PT OFFENSE SHOTS 3/3 Column {width="33%"}
+
+
+# SHOTS DEFENSE
+
+``` {python}
+d_1pt = d.groupby('1PTD').agg(poss = ('PS', 'count'),
+                              eff = ('PS', 'mean'))
+d_1pt['pr'] = d_1pt['poss'] / d_1pt['poss'].sum()
+d_1pt[['eff', 'pr']] = (d_1pt[['eff', 'pr']] * 100).round(1)
+d_1pt = d_1pt.reset_index()
+d_2pt = d.groupby('2PTD').agg(poss = ('PS', 'count'),
+                              eff = ('PS', 'mean'))
+d_2pt['pr'] = d_2pt['poss'] / d_2pt['poss'].sum()
+d_2pt[['eff', 'pr']] = (d_2pt[['eff', 'pr']] * 100).round(1)
+d_2pt = d_2pt.reset_index()
+
+```
+
+## 1PT DEFENSE Row {height="50%"}
+
+### 1PT DEFENSE 1/2 Column 
+
+```{python}
+cats = d_1pt['1PTD']
+v1 = d_1pt['pr']
+v2 = d_1pt['eff']
+w = 0.4
+x = np.arange(len(cats))
+fig, ax = plt.subplots(figsize = (9.5, 4.65), layout = 'constrained')
+spalvos = plt.color_sequences["tab20c"]
+bar1 = plt.bar(x - w/2, v1, width = w, color = spalvos[2], edgecolor = 'w', label='POSSESSIONS %')
+bar2 = plt.bar(x + w/2, v2, width = w, color = spalvos[6], edgecolor = 'w', label='EFFICIENCY')
+for bar in bar1:
+    height = bar.get_height()
+    ax.annotate(text = f'{height}', 
+                xy = (bar.get_x() + bar.get_width() / 2, height - 4.5),
+                ha = 'center')
+for bar in bar2:
+    height = bar.get_height()
+    ax.annotate(text = f'{height}', 
+                xy = (bar.get_x() + bar.get_width() / 2, height - 4.5),
+                ha = 'center')
+ax.spines['top'].set_visible(False)
+ax.spines['right'].set_visible(False)
+plt.xticks(x, cats)
+plt.title('1PT', fontsize = 16, fontweight = 'bold')
+plt.legend(frameon=False)
+```
+
+## 2PT DEFENSE Row {height="50%"}
+
+### 2PT DEFENSE 1/2 Column 
+
+```{python}
+cats = d_2pt['2PTD']
+v1 = d_2pt['pr']
+v2 = d_2pt['eff']
+w = 0.4
+x = np.arange(len(cats))
+fig, ax = plt.subplots(figsize = (9.5, 4.65), layout = 'constrained')
+spalvos = plt.color_sequences["tab20c"]
+bar1 = plt.bar(x - w/2, v1, width = w, color = spalvos[2], edgecolor = 'w', label='POSSESSIONS %')
+bar2 = plt.bar(x + w/2, v2, width = w, color = spalvos[6], edgecolor = 'w', label='EFFICIENCY')
+for bar in bar1:
+    height = bar.get_height()
+    ax.annotate(text = f'{height}', 
+                xy = (bar.get_x() + bar.get_width() / 2, height - 4.5),
+                ha = 'center')
+for bar in bar2:
+    height = bar.get_height()
+    ax.annotate(text = f'{height}', 
+                xy = (bar.get_x() + bar.get_width() / 2, height - 4.5),
+                ha = 'center')
+ax.spines['top'].set_visible(False)
+ax.spines['right'].set_visible(False)
+plt.xticks(x, cats)
+plt.title('2PT', fontsize = 16, fontweight = 'bold')
+plt.legend(frameon=False)
+```
